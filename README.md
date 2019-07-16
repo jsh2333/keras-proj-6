@@ -1,1 +1,1 @@
-# keras-proj-6
+6 medium-level keras projects
