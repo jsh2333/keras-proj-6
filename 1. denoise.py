@@ -15,6 +15,7 @@ from keras.datasets import mnist
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+import os
 
 
 # global constants and hyper-parameters
@@ -26,6 +27,15 @@ MY_BATCH = 200
 CNN_KERNEL = 3
 VECTOR_DIM = 16
 CNN_FILTERS = [32, 64]
+OUT_DIR = "./output"
+MODEL_DIR = "./model"
+
+
+# create directories
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
+if not os.path.exists(MODEL_DIR):
+    os.makedirs(MODEL_DIR)
 
 
     ####################
@@ -177,7 +187,9 @@ autoencoder.compile(loss = 'mse', optimizer = 'adam')
 autoencoder.fit(X_train_noisy, X_train,
                 validation_data = (X_test_noisy, X_test),
                 epochs = 10, batch_size = MY_BATCH)
-autoencoder.save('chap1.h5')
+
+file_name = 'chap1.h5'
+autoencoder.save(os.path.join(MODEL_DIR, file_name))
 
 
     ####################
@@ -218,4 +230,6 @@ for i in range(Nout):
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 
-plt.savefig('chap1.png')
+file_name = 'chap1.png'
+plt.savefig(os.path.join(OUT_DIR, file_name))
+
