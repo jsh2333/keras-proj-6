@@ -7,40 +7,46 @@
 
 # import packages
 import os
-import itertools
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import os
 import pandas as pd
-import zipfile
 
 from keras.models import Model, load_model
 from keras.layers import Input, Dense
 from keras.callbacks import ModelCheckpoint, TensorBoard
 from keras import regularizers
-from sklearn.metrics import confusion_matrix, precision_recall_curve
+from sklearn.metrics import confusion_matrix, precision_recall_curve, f1_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 
 # global constants and hyper-parameters
-RANDOM_SEED = 0
+RANDOM_SEED = 5234
 MY_SPLIT = 0.25
 DIM_ENCODER = 16
-EPOCHS = 10
+EPOCHS = 1
 BATCH_SIZE = 200
 OPTIMIZER = 'adam'
 LOSS = 'mean_squared_error'
 EVAL_METRIC = 'accuracy'
+MY_RECALL = 0.8
 
 
 # directories
 DB_DIR = "./database/"
-PLOTS_DIR = "./plots"
-MODEL_SAVE_DIR = "./saved_models"
-LOG_DIR = "./logs"
+OUT_DIR = "./output"
+MODEL_DIR = "./model"
+LOG_DIR = "./log"
 
+
+# create directories
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
+if not os.path.exists(MODEL_DIR):
+    os.makedirs(MODEL_DIR)
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 
 
     ####################
@@ -48,19 +54,22 @@ LOG_DIR = "./logs"
     ####################
 
 
+# load the database from a file and process it
 def load_and_preprocess_data():
-    data = pd.read_csv(DB_DIR + "creditcard.csv")
+
+    # read the file
+    raw_DB = pd.read_csv(DB_DIR + "creditcard.csv")
 
     # print some statistics of the raw DB
     print('\n== GENERAL DB INFO ==')
-    print(data.info())
+    print(raw_DB.info())
     print('\n== FIRST 5 DATA (RAW) ==')
-    print(data.head())
+    print(raw_DB.head())
     print('\n== DB STATISTICS (RAW) ==')
-    print(data[['Amount', 'Class']].describe())
+    print(raw_DB[['Amount', 'Class']].describe())
 
-    print('\nTotal number of transactions', data.shape[0])
-    print('Total number of fraud transactions:', data['Class'].sum())
+    print('\nTotal number of transactions', raw_DB.shape[0])
+    print('Total number of fraud transactions:', raw_DB['Class'].sum())
 
 
     # drop the "Time" column (axis = 1)
@@ -68,38 +77,66 @@ def load_and_preprocess_data():
     # we need to reshape the column to 2-dimension
     # to use fit_transform()
     scaler = StandardScaler()
-    data = data.drop(['Time'], axis = 1)
+    raw_DB = raw_DB.drop(['Time'], axis = 1)
 
-    amount = data['Amount'].values
+    amount = raw_DB['Amount'].values
     amount = amount.reshape(-1, 1)
-    data['Amount'] = scaler.fit_transform(amount)
+    raw_DB['Amount'] = scaler.fit_transform(amount)
 
     print('\n== FIRST 5 DATA (SCALED) ==')
-    print(data.head())
-    return data
+    print(raw_DB.head())
+    return raw_DB
 
 
-def get_train_and_test_data(processed_data):
-    X_train, X_test = train_test_split(processed_data, test_size = MY_SPLIT, 
-            random_state = RANDOM_SEED)
+# split the database to train and test sets
+def get_train_and_test_data(clean_DB):
 
+    # python function from scikitlearn package
+    # splits arrays or matrices into random train and test sets
+    X_train, X_test = train_test_split(clean_DB, test_size = MY_SPLIT)
+    
+
+    # process train input set
     # remove all fraud data (Class = 1) from train data
     # then remove "Class" column from train data
-    print(X_train.shape)
+    # all this is for anomally detection
+    print('\n== TRAIN AND TEST SET PROCESSING ==')
+    print('Train input set shape (original):', X_train.shape)
     X_train = X_train[X_train.Class == 0]
     X_train = X_train.drop(['Class'], axis = 1)
-    print(X_train.shape)
+    print('Train input set shape (processed):', X_train.shape)
 
 
-    # remove "Class" column from test data
-    # and assign it to Y_test, the true label
-    print(X_test.shape)
+    # process test input set
+    # remove "Class" column and assign it to Y_test
+    # we do NOT drop fraud transactions here
+    # all of this is for confusion matrix and F1 score calculation
+    print('Test input set shape (original):', X_test.shape)
     Y_test = X_test['Class']
     X_test = X_test.drop(['Class'], axis = 1)
-    print(X_test.shape)
-    print(Y_test.shape)
+    print('Test input set shape (processed):', X_test.shape)
+    print('Test output set shape:', Y_test.shape)
+
+
+    # the first column indicates which row in the excel file
+    # the rows are shuffled during spliting
+    print('\n== FIRST 5 TRAIN INPUT ==')
+    print(X_train.head())
+    print('\n== FIRST 5 TEST INPUT ==')
+    print(X_test.head())
+    print('\n== FIRST 5 TEST OUTPUT ==')
+    print(Y_test.head())
 
     return X_train, X_test, Y_test
+
+
+# Loading and processing data
+clean_DB = load_and_preprocess_data()
+
+
+# split the database to train and test sets
+# note that we do not use training set label!!!
+X_train, X_test, Y_test = get_train_and_test_data(clean_DB)
 
 
     ###############################
@@ -107,191 +144,99 @@ def get_train_and_test_data(processed_data):
     ###############################
 
 
-class MODEL():
-    def __init__(self, train_data, test_data, Y_test):
-        # Defining Data Variables
-        self.train_data = train_data
-        self.test_data = test_data
-        self.Y_test = Y_test
+# define encoder and decoder
+def define_model():
 
-        #Defining the model
-        self.model = self.define_model()
-
-        # Create Directories
-        if not os.path.exists(MODEL_SAVE_DIR):
-            os.makedirs(MODEL_SAVE_DIR)
-
-        if not os.path.exists(PLOTS_DIR):
-            os.makedirs(PLOTS_DIR)
+    # 29 inputs are entering the encoder
+    dim_input = X_train.shape[1]
+    input = Input(shape = (dim_input,))
+    print('\nEncoder input shape:', dim_input)
 
 
-    def define_model(self):
-        dim_input = self.train_data.shape[1]
-        layer_input = Input(shape = (dim_input,))
-        print('Decoder input shape:', dim_input)
-
-        # encoder: 29 -> 16 -> 8 neurons in a DNN
-        layer_encoder = Dense(DIM_ENCODER, activation = "tanh")(layer_input)
-        layer_encoder = Dense(int(DIM_ENCODER / 2), activation = "relu")(layer_encoder)
-
-        # decoder: 8 -> 29 neurons in a DNN
-        layer_decoder = Dense(int(DIM_ENCODER / 2), activation = 'tanh')(layer_encoder)
-        layer_decoder = Dense(dim_input, activation = 'relu')(layer_decoder)
-
-        autoencoder = Model(inputs = layer_input, outputs = layer_decoder)
-        autoencoder.summary()
-
-        return autoencoder
+    # encoder: 29 -> 16 -> 8 neurons in a DNN
+    encoder = Dense(DIM_ENCODER, activation = "tanh")(input)
+    encoder = Dense(int(DIM_ENCODER / 2), activation = "relu")(encoder)
 
 
-    def train_model(self):
-
-        self.model.compile(optimizer=OPTIMIZER,
-                      loss=LOSS,
-                      metrics=[EVAL_METRIC])
-
-        checkpoint = ModelCheckpoint(filepath=os.path.join(MODEL_SAVE_DIR, "trained_model.h5"),
-                                     verbose = 0,
-                                     save_best_only = True)
-
-        log_tensorboard = TensorBoard(log_dir='./logs',
-                                      histogram_freq = 0,
-                                      write_graph = True,
-                                      write_images = True)
-
-        history = self.model.fit(self.train_data, self.train_data,
-                             epochs = EPOCHS,
-                             batch_size = BATCH_SIZE,
-                             shuffle = True,
-                             validation_data = (self.test_data, self.test_data),
-                             verbose = 1,
-                             callbacks = [checkpoint, log_tensorboard]).history
-
-        self.history = history
-        print("Training Done. Plotting Loss Curves")
-        self.plot_loss_curves()
+    # decoder: 8 -> 29 neurons in a DNN
+    decoder = Dense(int(DIM_ENCODER / 2), activation = 'tanh')(encoder)
+    decoder = Dense(dim_input, activation = 'relu')(decoder)
 
 
+    # combining encoder and decoder to form autoencoder
+    autoencoder = Model(inputs = input, outputs = decoder)
+    autoencoder.summary()
 
-    def plot_loss_curves(self):
-        fig = plt.figure(num = "Loss Curves")
-        fig.set_size_inches(12, 6)
-        plt.plot(self.history['loss'])
-        plt.plot(self.history['val_loss'])
-        plt.title('Loss By Epoch')
-        plt.ylabel('Loss')
-        plt.xlabel('Epoch Num')
-        plt.legend(['Train_Data', 'Test_Data'], loc='upper right');
-        plt.grid(True, alpha=.25)
-        plt.tight_layout()
-
-        image_name = 'Loss_Curves.png'
-        fig.savefig(os.path.join(PLOTS_DIR, image_name), dpi=fig.dpi)
-
-        # clear the plot
-        plt.clf()
+    return autoencoder
 
 
+# plot loss curve using the history collected during training
+def plot_loss_curves(history):
 
-    def get_trained_model(self):
-        self.model = load_model(os.path.join(MODEL_SAVE_DIR, "trained_model.h5"))
+    # add title and determine the plot size 
+    fig = plt.figure(num = "Loss Curve")
+    fig.set_size_inches(12, 6)
+    
 
-    def get_test_predictions(self):
-        self.test_predictions = self.model.predict(self.test_data)
+    # adding axis labels and legend
+    plt.plot(history['loss'])
+    plt.plot(history['val_loss'])
+    plt.title('Loss By Epoch')
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch Num')
+    plt.legend(['X_train', 'X_test'], loc = 'upper right');
+    plt.grid(True, alpha = 0.25)
+    plt.tight_layout()
 
-    def plot_reconstruction_error_by_class(self):
-        self.get_test_predictions()
-        mse = np.mean(np.power(self.test_data - self.test_predictions, 2), axis=1)
-        self.recon_error = pd.DataFrame({'recon_error': mse,
-                                 'true_class': self.Y_test})
 
-        ## Plotting the errors by class
-        # Normal Transactions
-        fig = plt.figure(num = "Recon Error with Normal Transactions")
-        fig.set_size_inches(12, 6)
-        ax = fig.add_subplot(111)
-        normal_error_df = self.recon_error[(self.recon_error['true_class'] == 0) & (self.recon_error['recon_error'] < 50)]
-        _ = ax.hist(normal_error_df.recon_error.values, bins=20)
-        plt.xlabel("Recon Error Bins")
-        plt.ylabel("Num Samples")
-        plt.title("Recon Error with Normal Transactions")
-        plt.tight_layout()
-        image_name = "Recon_Error_with_Normal_Transactions.png"
-        fig.savefig(os.path.join(PLOTS_DIR, image_name), dpi=fig.dpi)
-        plt.clf()
+    # save the plot and close it
+    image_name = 'chap2.png'
+    fig.savefig(os.path.join(OUT_DIR, image_name))
+    plt.clf()
 
-        # Fraud Transactions
-        fig = plt.figure(num="Recon Error with Fraud Transactions")
-        fig.set_size_inches(12, 6)
-        ax = fig.add_subplot(111)
-        fraud_error_df = self.recon_error[(self.recon_error['true_class'] == 1)]
-        _ = ax.hist(fraud_error_df.recon_error.values, bins=20)
-        plt.xlabel("Recon Error Bins")
-        plt.ylabel("Num Samples")
-        plt.title("Recon Error with Fraud Transactions")
-        plt.tight_layout()
-        image_name = "Recon_Error_with_Fraud_Transactions.png"
-        fig.savefig(os.path.join(PLOTS_DIR, image_name), dpi=fig.dpi)
-        plt.clf()
 
-    def get_precision_recall_curves(self):
-        precision, recall, threshold = precision_recall_curve(self.recon_error.true_class, self.recon_error.recon_error)
-        # Plotting the precision curve
-        fig = plt.figure(num ="Precision Curve")
-        fig.set_size_inches(12, 6)
+# train the autoencoder
+def train_model():
+    model.compile(optimizer=OPTIMIZER,
+                    loss=LOSS,
+                    metrics=[EVAL_METRIC])
 
-        plt.plot(threshold, precision[1:], 'g', label='Precision curve')
-        plt.title('Precision By Recon Error Threshold Values')
-        plt.xlabel('Threshold')
-        plt.ylabel('Precision')
-        plt.xlim(0,200)
-        plt.tight_layout()
-        image_name = 'Precision_Threshold_Curve.png'
-        fig.savefig(os.path.join(PLOTS_DIR, image_name), dpi=fig.dpi)
-        plt.clf()
+    # keras package to save the model after every epoch
+    checkpoint = ModelCheckpoint(filepath=os.path.join(MODEL_DIR, "chap2.h5"),
+                                    verbose = 0,
+                                    save_best_only = True)
 
-        plt.plot(threshold, recall[1:], 'g', label='Recall curve')
-        plt.title('Recall By Recon Error Threshold Values')
-        plt.xlabel('Threshold')
-        plt.ylabel('Recall')
-        plt.tight_layout()
-        image_name = 'Recall_Threshold_Curve.png'
-        fig.savefig(os.path.join(PLOTS_DIR, image_name), dpi=fig.dpi)
-        plt.clf()
 
-    def get_confusion_matrix(self, min_recall = 0.8):
-        # Get the confusion matrix with min desired recall on the testing dataset used.
-        precision, recall, threshold = precision_recall_curve(self.recon_error.true_class, self.recon_error.recon_error)
-        idx = list(filter(lambda x: x[1] > min_recall, enumerate(recall[1:])))[-1][0]
-        th = threshold[idx]
-        print ("Min recall is : %f, Threshold for recon error is: %f " %(recall[idx+1], th))
+    # TensorBoard is a visualization tool provided with TensorFlow
+    log_tensorboard = TensorBoard(log_dir='./logs',
+                                    histogram_freq = 0,
+                                    write_graph = True,
+                                    write_images = True)
 
-        # Get the confusion matrix
-        predicted_class = [1 if e > th else 0 for e in self.recon_error.recon_error.values]
-        cnf_matrix = confusion_matrix(self.recon_error.true_class, predicted_class)
-        classes = ['Normal','Fraud']
 
-        fig = plt.figure(figsize=(12, 12))
-        plt.imshow(cnf_matrix, interpolation='nearest', cmap=plt.cm.Blues)
-        plt.title("Confusion Matrix")
-        plt.colorbar()
-        tick_marks = np.arange(len(classes))
-        plt.xticks(tick_marks, classes, rotation=45)
-        plt.yticks(tick_marks, classes)
+    # training with keras callback utilities
+    # we can use callbacks to get a view on internal states and statistics 
+    # of the model during training
+    # we can pass a list of callbacks to the .fit() 
+    # the relevant methods of the callbacks will then be called 
+    # at each stage of the training
+    history = model.fit(X_train, X_train,
+                            epochs = EPOCHS,
+                            batch_size = BATCH_SIZE,
+                            shuffle = True,
+                            validation_data = (X_test, X_test),
+                            verbose = 1,
+                            callbacks = [checkpoint, log_tensorboard]).history
 
-        fmt = 'd'
-        thresh = cnf_matrix.max() / 2.
-        for i, j in itertools.product(range(cnf_matrix.shape[0]), range(cnf_matrix.shape[1])):
-            plt.text(j, i, format(cnf_matrix[i, j], fmt),
-                     horizontalalignment="center",
-                     color="white" if cnf_matrix[i, j] > thresh else "black")
 
-        plt.ylabel('True label')
-        plt.xlabel('Predicted label')
-        plt.tight_layout()
-        image_name = 'Confusion_Matrix_with_threshold_{}.png'.format(th)
-        fig.savefig(os.path.join(PLOTS_DIR, image_name), dpi=fig.dpi)
-        plt.clf()
+    # training done. plotting loss curves
+    plot_loss_curves(history)
+    return history
+
+
+# define and train the model
+model = define_model()
+history = train_model()
 
 
     ####################
@@ -299,24 +244,110 @@ class MODEL():
     ####################
 
 
-# Loading and processing data
-print ("Loading the data")
-processed_data = load_and_preprocess_data()
-print ("Getting train and test dataset")
-X_train, X_test, Y_test = get_train_and_test_data(processed_data)
+# compute reconstruction error using the autoencoder
+# we use test set and its prediction 
+# then calculate mean square error between the two
+def recon_error():
 
-model_obj = MODEL(X_train, X_test, Y_test)
+    # use autoencoder to obtain prediction from test set
+    pred = model.predict(X_test)
+    print('\n== RECONSTRUCTION ERROR CALCULATION INFO ==')
+    print("Test set shape:", X_test.shape)   
+    print("Prediction shape:", pred.shape)       
+    print('Showing prediction data')
+    print(pred)
 
-print ("Training the model")
-model_obj.train_model()
+
+    # MSE calculation
+    # axis = 0 means along the column, axis = 1 along the row.
+    # we create a new pandas dataframe to store the error and label
+    mse = np.mean(np.power(X_test - pred, 2), axis = 1)
+    recon_error = pd.DataFrame({'recon_error': mse, 'true_class': Y_test})
+    print("\nMean square error shape:", mse.shape)    
+    print("Reconstruction error shape:", recon_error.shape)
+    print('Showing error data')
+    print(recon_error)
 
 
-print ("Loading the trained model")
-model_obj.get_trained_model()
-print ("Get Reconstruction Loss By Class")
-model_obj.plot_reconstruction_error_by_class()
-print ("Getting Precision Recall Curves by Thresholds")
-model_obj.get_precision_recall_curves()
-print ("Get confusion matrix with 80% recall on Test Dataset")
-model_obj.get_confusion_matrix(min_recall = 0.8)
+    # print stats on fraud transactions
+    # we see the average is very high
+    fraud = recon_error[(recon_error['true_class'] == 1)]
+    print('\n== RECONSTRUCTION ERROR STATS ==')    
+    print('There are', len(fraud), 'fraud data in the test set.')
+    print('Showing fraud data in the test set:')
+    print(fraud)   
+    
 
+    # print stats on reconstruction error
+    # we see the average is very low
+    test = recon_error[(recon_error['true_class'] == 0)]
+    print('\nOverall reconstruction error data stats:')
+    print(test.describe())
+
+    return recon_error
+
+
+# first we seek the threshold that gives at least 0.8 (= MY_RECALL) recall
+# next we use it to build confusion matrix and calculate F1 score
+def get_confusion_matrix(error):
+    
+    # we use precision_recall_curve() from scikit-learn package
+    # we use recall and threshold and ignore precision
+    _ , recall, threshold = precision_recall_curve(error.true_class, 
+            error.recon_error)
+
+    # print recall and threshold details
+    print('\n== RECALL AND THRESHOLD INFO ==')
+    print('There are', len(recall), 'recall values.')
+    print('There are', len(threshold), 'threshold values.')
+
+    print('\nRecall data:')
+    print(recall)
+    print('\nThreshold data:')
+    print(threshold)
+
+
+    # searching for the threshold that gives at least 0.8 (= MY_RECALL) recall
+    # recall value is decreasing while threshold is increasing
+    where = np.where(recall <= MY_RECALL)
+    idx = where[0][0]
+    th_val = threshold[idx]
+    print('\nIndex:', idx)
+    print('Threshold:', th_val)
+    print('Recall:', recall[idx])
+
+
+    # build binary prediction array
+    # we use the threshold calculated above
+    # if the reconstruction error value is greater than the threshold
+    # we mark it as fraud
+    # pred: 0 means not fraud, 1 is fraud
+    pred = [1 if val > th_val else 0 for val in error.recon_error.values]
+    c_matrix = confusion_matrix(error.true_class, pred)
+    print('\n== PREDICTION VS. GROUND TRUTH INFO ==')
+    print('Number of test data:', len(pred))
+    print('Number of non-fraud data:', len(pred) - sum(error.true_class))
+    print('Number of fraud data:', sum(error.true_class))
+
+
+    # show confusion matrix
+    # positive: not fraud, negative: fraud
+    #             pos (truth)   neg (truth)
+    # pos (pred)  [true_pos      false_pos]
+    # neg (pred)  [false_neg      true_neg] 
+    print('\n== CONFUSION MATRIX ==')
+    print(c_matrix)
+    print("\nF1 score:", f1_score(error.true_class, pred, average = 'micro'))
+
+
+# load the model after training
+load_model(os.path.join(MODEL_DIR, "chap2.h5"))
+
+
+# calculate reconstruction error
+recon_error = recon_error()
+
+
+# seek the threshold that gives at least 0.8 (= MY_RECALL) recall
+# use the threshold to build confusion matrix and calculate F1 score
+get_confusion_matrix(recon_error)
