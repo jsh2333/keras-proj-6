@@ -22,7 +22,7 @@ from keras.models import Model
 DIM = 32
 RGB_CH = 3
 GRAY_CH = 1
-MY_EPOCH = 1
+MY_EPOCH = 10
 MY_BATCH = 200
 OUT_DIR = "./output"
 MODEL_DIR = "./model"
