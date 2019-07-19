@@ -25,7 +25,7 @@ from sklearn.model_selection import train_test_split
 RANDOM_SEED = 5234
 MY_SPLIT = 0.25
 DIM_ENCODER = 16
-EPOCHS = 1
+EPOCHS = 10
 BATCH_SIZE = 200
 OPTIMIZER = 'adam'
 LOSS = 'mean_squared_error'
