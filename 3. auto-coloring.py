@@ -24,6 +24,7 @@ RGB_CH = 3
 GRAY_CH = 1
 MY_EPOCH = 10
 MY_BATCH = 200
+MY_SPLIT = 0.2
 OUT_DIR = "./output"
 MODEL_DIR = "./model"
 
@@ -40,8 +41,9 @@ if not os.path.exists(MODEL_DIR):
     ####################
 
 
+# read CIFAR10 database
+# Unet does not require the labels (Y_train and Y_test)
 (X_train, _), (X_test, _) = datasets.cifar10.load_data()
-
 print('\n== SHAPE INFO ==')
 print('X_train:', X_train.shape)
 print('X_test:', X_test.shape)
@@ -54,13 +56,8 @@ X_train /= 255
 X_test /= 255
 
 
-X_train_out = X_train.reshape(X_train.shape[0], DIM, DIM, RGB_CH)
-X_test_out = X_test.reshape(X_test.shape[0], DIM, DIM, RGB_CH)
-input_shape = (DIM, DIM, GRAY_CH)
-
-
-# convert color to gray: easy (the oopsite is hard)
-# teh shape changes from (32, 32, 3) to (32, 32, 1)
+# convert color to gray: easy (the opposite is hard)
+# the shape changes from (32, 32, 3) to (32, 32, 1)
 # we use a special formular to make it gray
 # "..." is called python ellipsis
 def RGB2Gray(X):
@@ -71,29 +68,27 @@ def RGB2Gray(X):
     return 0.299 * R + 0.587 * G + 0.114 * B
 
 
-X_train_in = RGB2Gray(X_train_out)
-X_test_in = RGB2Gray(X_test_out)
+# obtain gray-scaled images of the train and test sets
+X_train_gray = RGB2Gray(X_train)
+X_test_gray = RGB2Gray(X_test)
 
-print(X_train[0].shape)
+print('\n== SHAPE INFO FOR GRAY IMAGES ==')
+print('X_train_gray:', X_train_gray.shape)
+print('X_test_gray:', X_test_gray.shape)
+
+
+# print sample color image
+# dimension has to be 3 to plot color images
 plt.imshow(X_train[0])
-#plt.show()
+plt.show()
 
-print(X_train_out[0].shape)
-plt.imshow(X_train_out[0])
-#plt.show()
 
-print(X_train_in[0].shape)
-plt.imshow(X_train_in[0].reshape(DIM, DIM))
+# print sample gray image
+# dimension has to be 2 to plot gray-scale images
+plt.imshow(X_train_gray[0].reshape(DIM, DIM))
 plt.gray()
-#plt.show()
+plt.show()
 plt.clf()
-
-print('X_train input:', X_train_in.shape)
-print('X_train output:', X_train_out.shape)
-print('X_test input:', X_test_in.shape)        
-print('X_test output:', X_test_out.shape)
-
-
 
 
     ###############################
@@ -101,74 +96,100 @@ print('X_test output:', X_test_out.shape)
     ###############################
 
 
-# mp_flag decides if we do max pooling or not
-def conv(x, ch_out, mp_flag = True):
+# CNN for encoding in Unet
+def conv_unet(x, ch_out, mp_flag):
+
+    # mp_flag decides if we do max pooling or not
+    # if used, the image size reduces by 1/4
     x = MaxPooling2D((2, 2), padding = 'same')(x) if mp_flag else x
+
+    # first convolution with 3x3 filter
     x = Conv2D(ch_out, (3, 3), padding = 'same')(x)
     x = BatchNormalization()(x)
     x = Activation('tanh')(x)
     x = Dropout(0.05)(x)
+
+    # second convolution with 3x3 filter
     x = Conv2D(ch_out, (3, 3), padding = 'same')(x)
     x = BatchNormalization()(x)
     x = Activation('tanh')(x)
+
     return x
 
 
-# axis = 3 is for RGB channel
+# CNN for decoding in Unet
 def deconv_unet(x, ext, ch_out):
+    
+    # upscaling to increase the image size by 4x
     x = UpSampling2D((2, 2))(x)
 
     # concatenation makes this ANN a UNET
-    # it adds non-neighboring synaptic connections
+    # add non-neighboring bypass connections
     # between ext (= old layer) and x (= currunt layer) 
+    # axis = 3 is for RGB channel
     x = Concatenate(axis = 3)([x, ext])
 
+    # first convolution with 3x3 filter
     x = Conv2D(ch_out, (3, 3), padding='same')(x)
     x = BatchNormalization()(x)
     x = Activation('tanh')(x)
+
+    # second convolution with 3x3 filter
     x = Conv2D(ch_out, (3, 3), padding='same')(x)
     x = BatchNormalization()(x)
     x = Activation('tanh')(x)
     return x
 
 
-# input
+# input layer definition
+input_shape = (DIM, DIM, GRAY_CH)
 original = Input(shape = input_shape)
         
 
-# encoder construction
-c1 = conv(original, 16, mp_flag = False)
+# constrcut the encoder part of Unet
+c1 = conv_unet(original, 16, False)
 print('\n== SHAPE INFO DURING UNET CONSTRUCTION ==')          
 print('Input shape to Unet:', input_shape)
 print('Shape after the first CNN:', c1.shape)
-c2 = conv(c1, 32)
+
+c2 = conv_unet(c1, 32, True)
 print('Shape after the second CNN:', c2.shape)
-encoded = conv(c2, 64)
-print('Shape after the third CNN:', encoded.shape)
+
+encoded = conv_unet(c2, 64, True)
+print('Shape of the encoder output:', encoded.shape)
 
 
-# decoder construction
-# connect c2 layer to the new layer
+# constrcut the encoder part of Unet
+# connect c2 layer as bypass
 x = deconv_unet(encoded, c2, 32)
 print('\nShape after the first de-CNN:', x.shape)
 
-# connect c1 layer to the new layer
+# connect c1 layer as bypass
 x = deconv_unet(x, c1, 16)
 print('Shape after the second de-CNN:', x.shape)
 
-decoded = Conv2D(RGB_CH, (3, 3), activation = 'sigmoid', padding = 'same')(x)
-print('Shape after the final CNN:', decoded.shape)
 
+# one more CNN layer to produce the final output
+# sigmoid activation, instea of tanh, is used 
+# 3-channel color image is produced
+decoded = Conv2D(RGB_CH, (3, 3), activation = 'sigmoid', 
+        padding = 'same')(x)
+print('Shape of the decoder output:', decoded.shape)
+
+
+# forming the overall Unet
 unet = Model(inputs = original, outputs = decoded)
 unet.summary()
 
 
+# model training
+# the inputs are gray images, and the outputs color images
 unet.compile(optimizer = 'adadelta', loss = 'mse')
-history = unet.fit(X_train_in, X_train_out,
+history = unet.fit(X_train_gray, X_train,
                     epochs = MY_EPOCH,
                     batch_size = MY_BATCH,
                     shuffle = True,
-                    validation_split = 0.2)
+                    validation_split = MY_SPLIT)
 
 unet.save(os.path.join(MODEL_DIR, 'chap3.h5'))
 
@@ -177,53 +198,52 @@ unet.save(os.path.join(MODEL_DIR, 'chap3.h5'))
     # MODEL EVALUATION #
     ####################
 
-def plot_loss(history):
-    # summarize history for loss
-    if not isinstance(history, dict):
-        history = history.history
 
+# plot loss and validation curves
+def plot_loss(history):
+    history = history.history
     plt.plot(history['loss'])
     plt.plot(history['val_loss'])
     plt.ylabel('Loss')
     plt.xlabel('Epoch')
     plt.legend(['Training data', 'Validation data'], loc=0)
 
+    # save the plot as PNG file
     plt.savefig(os.path.join(OUT_DIR, 'chap3-plot.png'))
     print('\n== LOSS PLOT SAVED ==')
     plt.clf()
 
 
-def show_images(X_test_in):
+# pick the first 10 images in the database
+# show 3 kinds of images per data: 
+# original (top), auto-coloring (middle), and ground truth (bottom)
+def show_images(X_test_gray):
 
-    # color in, color out
-    decoded_imgs_org = unet.predict(X_test_in)
-    decoded_imgs = decoded_imgs_org
+    # use the Unet model to predict color images
+    # inputs are gray-scale images of the test set
+    pred = unet.predict(X_test_gray)
 
 
-    # shape changes from (10000, 32, 32, 1) to (10000, 32, 32)
-    print(X_test_in.shape)
-    X_test_in = X_test_in[..., 0]
-    print(X_test_in.shape)
-
+    # show the fist 10 images in the databse
     n = 10
     plt.figure(figsize = (20, 6))
 
     for i in range(n):
         # gray-scale image
         ax = plt.subplot(3, n, i + 1)
-        plt.imshow(X_test_in[i], cmap='gray')
+        plt.imshow(X_test_gray[i].reshape(32, 32), cmap='gray')
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
 
         # auto-colored image
         ax = plt.subplot(3, n, i + 1 + n)
-        plt.imshow(decoded_imgs[i])
+        plt.imshow(pred[i])
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
 
-        # golden truth image
+        # ground truth image
         ax = plt.subplot(3, n, i + 1 + n * 2)
-        plt.imshow(X_test_out[i])
+        plt.imshow(X_test[i])
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
 
@@ -234,4 +254,4 @@ def show_images(X_test_in):
 
 
 plot_loss(history)
-show_images(X_test_in)
+show_images(X_test_gray)

@@ -25,7 +25,7 @@ from sklearn.model_selection import train_test_split
 RANDOM_SEED = 5234
 MY_SPLIT = 0.25
 DIM_ENCODER = 16
-EPOCHS = 10
+EPOCHS = 5
 BATCH_SIZE = 200
 OPTIMIZER = 'adam'
 LOSS = 'mean_squared_error'
@@ -37,7 +37,7 @@ MY_RECALL = 0.8
 DB_DIR = "./database/"
 OUT_DIR = "./output"
 MODEL_DIR = "./model"
-LOG_DIR = "./log"
+LOG_DIR = "./logs"
 
 
 # create directories
@@ -208,6 +208,8 @@ def train_model():
 
 
     # TensorBoard is a visualization tool provided with TensorFlow
+    # tensorboard --logdir=logs
+    # localhost:6006
     log_tensorboard = TensorBoard(log_dir='./logs',
                                     histogram_freq = 0,
                                     write_graph = True,
