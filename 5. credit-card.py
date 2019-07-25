@@ -119,7 +119,7 @@ def get_train_and_test_data(clean_DB):
 
 
     # the first column indicates which row in the excel file
-    # the rows are shuffled during spliting
+    # the rows are shuffled during splitting
     print('\n== FIRST 5 TRAIN INPUT ==')
     print(X_train.head())
     print('\n== FIRST 5 TEST INPUT ==')
@@ -202,7 +202,7 @@ def train_model():
                     metrics=[EVAL_METRIC])
 
     # keras package to save the model after every epoch
-    checkpoint = ModelCheckpoint(filepath=os.path.join(MODEL_DIR, "chap2.h5"),
+    checkpoint = ModelCheckpoint(filepath = os.path.join(MODEL_DIR, "chap2.h5"),
                                     verbose = 0,
                                     save_best_only = True)
 

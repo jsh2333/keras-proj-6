@@ -6,8 +6,7 @@
 
 
 # import packages
-import os
-import glob
+import os, glob
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -24,16 +23,11 @@ from scipy.misc import imresize, imread
 
 
 # global constants and hyper-parameters
-DB_DIR = "database/celeb/*.*"
 MY_EPOCH = 100
 MY_BATCH = 1
-OUT_DIR = "./output"
-MODEL_DIR = "./model"
-LOG_DIR = "./logs"
-DB_DIR = "database/celeb/*.*"
 LOW_SHAPE = (64, 64, 3)
 HIGH_SHAPE = (256, 256, 3)
-MY_MOMENTUM = 0.8
+MY_MOM = 0.8
 MY_ALPHA = 0.2
 MY_RESIDUAL = 15
 MY_OPT = Adam(0.0002, 0.5)
@@ -42,6 +36,13 @@ MY_OPT = Adam(0.0002, 0.5)
 # 0 is no: we do training from scratch
 # 1 is yes: we do prediction using the saved models
 TRAINING_DONE = 0
+
+
+# directories
+DB_DIR = "./database/celeb/*.*"
+OUT_DIR = "./output"
+MODEL_DIR = "./model"
+LOG_DIR = "./logs"
 
 
 # create directories
@@ -96,28 +97,6 @@ def sample_images(batch_size):
     return np.array(high_img), np.array(low_img)
 
 
-# save low-resolution, high-resolution (original) and
-# fake high-resolution images 
-def save_images(low_res_image, original_image, fake_image, path):
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 3, 1)
-    ax.imshow(low_res_image)
-    ax.axis("off")
-    ax.set_title("Low-resolution")
-
-    ax = fig.add_subplot(1, 3, 2)
-    ax.imshow(original_image)
-    ax.axis("off")
-    ax.set_title("Original")
-
-    ax = fig.add_subplot(1, 3, 3)
-    ax.imshow(fake_image)
-    ax.axis("off")
-    ax.set_title("Fake")
-
-    plt.savefig(path)
-
-
     ##################
     # MODEL BUILDING #
     ##################
@@ -146,11 +125,16 @@ def build_vgg():
 
     # create a Keras model
     # we do not train VGG19 further
-    model = Model(inputs = [input_layer], outputs = [features],  name = "VGG19")
+    model = Model(inputs = [input_layer], outputs = [features])
     model.trainable = False
     model.summary()
 
     return model
+
+
+# common convolution definition
+def MY_CONV(channel, kernel, stride):
+    return Conv2D(channel, kernel, strides = stride, padding = 'SAME')
 
 
 # Create a discriminator network using deep CNN
@@ -162,43 +146,43 @@ def build_discriminator():
     input_layer = Input(shape = input_shape)
 
     # first convolution block
-    dis1 = Conv2D(64, kernel_size = 3, strides = 1, padding = 'same')(input_layer)
+    dis1 = MY_CONV(64, 3, 1)(input_layer)
     dis1 = LeakyReLU(MY_ALPHA)(dis1)
 
     # second convolution block
-    dis2 = Conv2D(64, kernel_size = 3, strides = 2, padding = 'same')(dis1)
+    dis2 = MY_CONV(64, 3, 2)(dis1)
     dis2 = LeakyReLU(MY_ALPHA)(dis2)
-    dis2 = BatchNormalization(momentum = MY_MOMENTUM)(dis2)
+    dis2 = BatchNormalization(momentum = MY_MOM)(dis2)
 
     # third convolution block
-    dis3 = Conv2D(128, kernel_size = 3, strides = 1, padding = 'same')(dis2)
+    dis3 = MY_CONV(128, 3, 1)(dis2)
     dis3 = LeakyReLU(MY_ALPHA)(dis3)
-    dis3 = BatchNormalization(momentum = MY_MOMENTUM)(dis3)
+    dis3 = BatchNormalization(momentum = MY_MOM)(dis3)
 
     # fourth convolution block
-    dis4 = Conv2D(128, kernel_size = 3, strides = 2, padding = 'same')(dis3)
+    dis4 = MY_CONV(128, 3, 2)(dis3)
     dis4 = LeakyReLU(MY_ALPHA)(dis4)
-    dis4 = BatchNormalization(momentum = MY_MOMENTUM)(dis4)
+    dis4 = BatchNormalization(momentum = MY_MOM)(dis4)
 
     # fifth convolution block
-    dis5 = Conv2D(256, kernel_size = 3, strides = 1, padding = 'same')(dis4)
+    dis5 = MY_CONV(256, 3, 1)(dis4)
     dis5 = LeakyReLU(MY_ALPHA)(dis5)
-    dis5 = BatchNormalization(momentum = MY_MOMENTUM)(dis5)
+    dis5 = BatchNormalization(momentum = MY_MOM)(dis5)
 
     # sixth convolution block
-    dis6 = Conv2D(256, kernel_size = 3, strides = 2, padding = 'same')(dis5)
+    dis6 = MY_CONV(256, 3, 2)(dis5)
     dis6 = LeakyReLU(MY_ALPHA)(dis6)
-    dis6 = BatchNormalization(momentum = MY_MOMENTUM)(dis6)
+    dis6 = BatchNormalization(momentum = MY_MOM)(dis6)
 
     # seventh convolution block
-    dis7 = Conv2D(512, kernel_size = 3, strides = 1, padding = 'same')(dis6)
+    dis7 = MY_CONV(512, 3, 1)(dis6)
     dis7 = LeakyReLU(MY_ALPHA)(dis7)
-    dis7 = BatchNormalization(momentum = MY_MOMENTUM)(dis7)
+    dis7 = BatchNormalization(momentum = MY_MOM)(dis7)
 
     # eight convolution block
-    dis8 = Conv2D(512, kernel_size = 3, strides=2, padding = 'same')(dis7)
+    dis8 = MY_CONV(512, 3, 2)(dis7)
     dis8 = LeakyReLU(MY_ALPHA)(dis8)
-    dis8 = BatchNormalization(momentum = MY_MOMENTUM)(dis8)
+    dis8 = BatchNormalization(momentum = MY_MOM)(dis8)
 
     # add a dense layer
     dis9 = Dense(units = 1024)(dis8)
@@ -208,7 +192,7 @@ def build_discriminator():
     output = Dense(units = 1, activation = 'sigmoid')(dis9)
 
     # final keras model for discriminator
-    model = Model(inputs = [input_layer], outputs = [output], name = "discriminator")
+    model = Model(inputs = [input_layer], outputs = [output])
 
     print('\n== DISCRIMINATOR MODEL SUMMARY ==')
     print('Input shape:', input_shape)
@@ -222,13 +206,13 @@ def build_discriminator():
 def residual_block(x):
 
     # first convolution block
-    res = Conv2D(64, kernel_size = 3, strides = 1, padding = "same")(x)
+    res = MY_CONV(64, 3, 1)(x)
     res = Activation(activation = "relu")(res)
-    res = BatchNormalization(momentum = MY_MOMENTUM)(res)
+    res = BatchNormalization(momentum = MY_MOM)(res)
 
     # second convolution block
-    res = Conv2D(64, kernel_size = 3, strides = 1, padding = "same")(res)
-    res = BatchNormalization(momentum = MY_MOMENTUM)(res)
+    res = MY_CONV(64, 3, 1)(res)
+    res = BatchNormalization(momentum = MY_MOM)(res)
 
     # add bypass synaptic connections
     res = Add()([res, x])
@@ -244,8 +228,9 @@ def build_generator():
     input_layer = Input(shape = input_shape)
 
     # pre-residual block
-    gen1 = Conv2D(64, kernel_size = 9, strides = 1, 
-            padding = 'same', activation='relu')(input_layer)
+    gen1 = Conv2D(64, (9, 9), strides = 1, padding = 'same', 
+            activation='relu')(input_layer)
+
     print('\n== GENERATOR MODEL SUMMARY ==')
     print('Input shape:', input_shape)
     print('After pre-residual:', gen1.shape)
@@ -257,42 +242,41 @@ def build_generator():
     print('After adding residual:', res.shape)
 
     # post-residual block
-    gen2 = Conv2D( 64, kernel_size = 3, strides = 1, 
-            padding = 'same')(res)
-    gen2 = BatchNormalization(momentum = MY_MOMENTUM)(gen2)
+    gen2 = MY_CONV(64, 3, 1)(res)
+    gen2 = BatchNormalization(momentum = MY_MOM)(gen2)
     print('After post-residual', gen2.shape)
 
-    # take the sum of the output from the pre-residual block (gen1) 
+    # take the sum of the output from pre-residual block (gen1) 
     # and the post-residual block (gen2)
     gen3 = Add()([gen2, gen1])
-    print('After adding pre-residual and post-residual', gen3.shape)
+    print('After adding pre- and post-residual', gen3.shape)
 
     # add an upsampling block
     gen4 = UpSampling2D(size = 2)(gen3)
-    gen4 = Conv2D(256, kernel_size = 3, strides = 1, padding = 'same')(gen4)
+    gen4 = MY_CONV(256, 3, 1)(gen4)
     gen4 = Activation('relu')(gen4)
     print('After first upscaling', gen4.shape)
 
     # add another upsampling block
     gen5 = UpSampling2D(size = 2)(gen4)
-    gen5 = Conv2D(256, kernel_size = 3, strides = 1, padding = 'same')(gen5)
+    gen5 = MY_CONV(256, 3, 1)(gen5)
     gen5 = Activation('relu')(gen5)
     print('After second upscaling', gen5.shape)
 
     # output convolution layer
-    gen6 = Conv2D( 3, kernel_size = 9, strides = 1, padding = 'same')(gen5)
+    gen6 = MY_CONV(3, 9, 1)(gen5)
     output = Activation('tanh')(gen6)
     print('Shape of the generator output', output.shape)
 
     # Keras model of our generator
-    model = Model(inputs = [input_layer], outputs = [output], name = "generator")
+    model = Model(inputs = [input_layer], outputs = [output])
     model.summary()
 
     return model
 
 
 # finally create GASN network using all preview models including
-# VGG19, descriminator, and generator
+# VGG19, discriminator, and generator
 def build_GAN():
 
     # build and compile VGG19 network to extract features
@@ -333,9 +317,10 @@ def build_GAN():
 
     # Create and compile an adversarial model
     # our GAN has two inputs and two outputs
-    # the two inputs inclide:
+    # the two inputs include:
     #    1. low resolution image (goes to generator)
     #    2. high resolution image (goes to discriminator)
+    #
     # the two outputs include: 
     #    1. probs: discriminator output
     #    2. features: VGG19 output 
@@ -343,7 +328,6 @@ def build_GAN():
 
     # we train generator during GAN training
     # discriminator is not trained
-
     # perceptual loss = 1 * content loss + 0.001 * adversarial loss
     #                 = 1 * mse (generator) + 0.001 * crossentropy (discriminator)
     # mse is optimized during generator/GAN training   
@@ -376,89 +360,90 @@ def write_log(callback, name, value, epoch):
     callback.writer.flush()
 
 
+# train discriminator
+def train_D():
+    # sample a batch of images
+    # and normalize the pixel values to [-1, 1]
+    # this works well with tanh activation
+    real_high, real_low = sample_images(MY_BATCH)
+    real_high = real_high / 127.5 - 1.
+    real_low = real_low / 127.5 - 1.
+
+
+    # generate high-resolution images from low-resolution images
+    fake_high = generator.predict(real_low)
+
+
+    # we use 256 values (= 16 x 16) to represent 
+    # how realistic fake images are
+    # initialize real labels with 1 and fake 0
+    real_labels = np.ones((MY_BATCH, 16, 16, 1))
+    fake_labels = np.zeros((MY_BATCH, 16, 16, 1))
+
+    # we first train the discriminator using real data
+    # train_on_batch accepts (training data, target data)        
+    # we get two mse loss values in return:
+    # only the first value is relevant
+    d_loss_real = discriminator.train_on_batch(real_high, real_labels)
+
+
+    # we train the discriminator again using fake data and labels
+    # we get two mse loss values in return:
+    # only the first value is relevant
+    d_loss_fake = discriminator.train_on_batch(fake_high, fake_labels)
+
+    # we take the average of the two above and report as the combined loss
+    d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+    print("  Discriminator loss:", d_loss[0])
+
+    return d_loss
+
+
+# train generator
+def train_G():
+    # sample a new batch of images
+    # and normalize the pixel values to [-1, 1]
+    # this works well with tanh activation
+    real_high, real_low = sample_images(MY_BATCH)
+    real_high = real_high / 127.5 - 1.
+    real_low = real_low / 127.5 - 1.
+
+
+    # Extract feature maps for real high-resolution images
+    # VGG shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
+    real_features = vgg.predict(real_high)
+    real_labels = np.ones((MY_BATCH, 16, 16, 1))
+
+    # Train the generator network
+    # we want generator to fake real images as much as possible
+    # discriminator is not trained during this process
+    # train_on_batch accepts (training data, target data) 
+    # our GAN needs the following model parameters
+    # ([input_low, input_high], [probs, features])
+    g_loss = gan_model.train_on_batch([real_low, real_high],
+            [real_labels, real_features])
+
+    return g_loss
+
+
+# overall GAN training
 # we alternate between discriminator and generotor training 
 # during generator training, discriminator is not trained
-def train_GAN(vgg, discriminator, generator, gan_model, tensorboard):
+def train_GAN(vgg, discriminator, generator, gan_model, TB):
     print('\n== GAN TRAINING STARTS ==')
 
     # repeat epochs
     for epoch in range(MY_EPOCH):
         print("Epoch:", epoch)
 
-        #######################
-        # TRAIN DISCRIMINATOR #
-        #######################
-
-        # sample a batch of images
-        # and normalize the pixel values to [-1, 1]
-        # this works well with tanh activation
-        real_high, real_low = sample_images(MY_BATCH)
-        real_high = real_high / 127.5 - 1.
-        real_low = real_low / 127.5 - 1.
-
-
-        # generate high-resolution images from low-resolution images
-        fake_high = generator.predict(real_low)
-
-
-        # we use 256 values (= 16 x 16) to represent 
-        # how realisitc fake images are
-        # initialize real labels with 1
-        # initialize fake labels with 0
-        real_labels = np.ones((MY_BATCH, 16, 16, 1))
-        fake_labels = np.zeros((MY_BATCH, 16, 16, 1))
-
-        # we first train the discriminator using real data
-        # train_on_batch accepts (training data, target data)        
-        # we get two mse loss values in return:
-        # only the first value is relevant
-        d_loss_real = discriminator.train_on_batch(real_high, real_labels)
-
-
-        # we train the discriminator again using fake data and labels
-        # we get two mse loss values in return:
-        # only the first value is relevant
-        d_loss_fake = discriminator.train_on_batch(fake_high, fake_labels)
-
-
-        # we take the average of the two above and report as the combined loss
-        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-        print("  Discriminator loss:", d_loss[0])
-
-
-        ###################
-        # TRAIN GENERATOR #
-        ###################
-
-
-        # sample a new batch of images
-        # and normalize the pixel values to [-1, 1]
-        # this works well with tanh activation
-        real_high, real_low = sample_images(MY_BATCH)
-        real_high = real_high / 127.5 - 1.
-        real_low = real_low / 127.5 - 1.
-
-
-        # Extract feature maps for real high-resolution images
-        # VGG shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
-        real_features = vgg.predict(real_high)
-
-
-        # Train the generator network
-        # we want generator to fake real images as much as possible
-        # discriminator is not trained during this process
-        # train_on_batch accepts (training data, target data) 
-        # our GAN needs the following model parameters
-        # ([input_low, input_high], [probs, features])
-        g_loss = gan_model.train_on_batch([real_low, real_high],
-                [real_labels, real_features])
-
+        d_loss = train_D()
+        g_loss = train_G()
 
         # we print perceptual loss
         # and write the losses to tensorboard
         print("  Generator loss:", g_loss[0])
-        write_log(tensorboard, 'g_loss', g_loss[0], epoch)
-        write_log(tensorboard, 'd_loss', d_loss[0], epoch)
+        write_log(TB, 'g_loss', g_loss[0], epoch)
+        write_log(TB, 'd_loss', d_loss[0], epoch)
 
 
     # report final loss
@@ -470,6 +455,33 @@ def train_GAN(vgg, discriminator, generator, gan_model, tensorboard):
     # Save models
     generator.save_weights("model/chap5-gen.h5")
     discriminator.save_weights("model/chap5-dis.h5")
+
+
+# save low-resolution, high-resolution (original) and
+# fake high-resolution images 
+def save_images(low_res_image, original_image, fake_image, path):
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 3, 1)
+    ax.imshow(low_res_image)
+    ax.axis("off")
+    ax.set_title("Low-resolution")
+
+    ax = fig.add_subplot(1, 3, 2)
+    ax.imshow(original_image)
+    ax.axis("off")
+    ax.set_title("Original")
+
+    ax = fig.add_subplot(1, 3, 3)
+    ax.imshow(fake_image)
+    ax.axis("off")
+    ax.set_title("Fake")
+
+    plt.savefig(path)
+
+
+    ####################
+    # MODEL EVALUATION #
+    ####################
 
 
 # we pick 5 random images to test our GAN model
@@ -499,11 +511,7 @@ def evaluate_GAN(generator, discriminator):
         save_images(real_low, real_high, fake_image, path)
 
 
-    ####################
-    # MODEL EVALUATION #
-    ####################
-
-
+# prediction with GAN
 def gan_prediction():
 
     # we just need a trained generator
