@@ -193,7 +193,7 @@ model.compile(loss = 'categorical_crossentropy', optimizer = 'adam',
         metrics = ['accuracy'])
 model.fit(X_train, Y_train, validation_data = (X_test, Y_test), 
         epochs = MY_EPOCH, batch_size = MY_BATCH, verbose = 1)
-model.save('chap10.h5')
+model.save('chap2.h5')
 
 
     ####################

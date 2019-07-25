@@ -25,6 +25,9 @@ GRAY_CH = 1
 MY_EPOCH = 10
 MY_BATCH = 200
 MY_SPLIT = 0.2
+
+
+# directories
 OUT_DIR = "./output"
 MODEL_DIR = "./model"
 
@@ -58,7 +61,7 @@ X_test /= 255
 
 # convert color to gray: easy (the opposite is hard)
 # the shape changes from (32, 32, 3) to (32, 32, 1)
-# we use a special formular to make it gray
+# we use a special formula to make it gray
 # "..." is called python ellipsis
 def RGB2Gray(X):
     R = X[..., 0:1]
@@ -141,43 +144,48 @@ def deconv_unet(x, ext, ch_out):
     return x
 
 
-# input layer definition
-input_shape = (DIM, DIM, GRAY_CH)
-original = Input(shape = input_shape)
-        
+# construct the encoder part of Unet
+def build_enc():
+    c1 = conv_unet(original, 16, False)
+    print('\n== SHAPE INFO DURING UNET CONSTRUCTION ==')          
+    print('Input shape to Unet:', input_shape)
+    print('Shape after the first CNN:', c1.shape)
 
-# constrcut the encoder part of Unet
-c1 = conv_unet(original, 16, False)
-print('\n== SHAPE INFO DURING UNET CONSTRUCTION ==')          
-print('Input shape to Unet:', input_shape)
-print('Shape after the first CNN:', c1.shape)
+    c2 = conv_unet(c1, 32, True)
+    print('Shape after the second CNN:', c2.shape)
 
-c2 = conv_unet(c1, 32, True)
-print('Shape after the second CNN:', c2.shape)
+    encoded = conv_unet(c2, 64, True)
+    print('Shape of the encoder output:', encoded.shape)
 
-encoded = conv_unet(c2, 64, True)
-print('Shape of the encoder output:', encoded.shape)
+    return c1, c2, encoded
 
 
-# constrcut the encoder part of Unet
-# connect c2 layer as bypass
-x = deconv_unet(encoded, c2, 32)
-print('\nShape after the first de-CNN:', x.shape)
+# construct the decoder part of Unet
+def build_dec(c1, c2, encoded):
+    # connect c2 layer as bypass
+    x = deconv_unet(encoded, c2, 32)
+    print('\nShape after the first de-CNN:', x.shape)
 
-# connect c1 layer as bypass
-x = deconv_unet(x, c1, 16)
-print('Shape after the second de-CNN:', x.shape)
+    # connect c1 layer as bypass
+    x = deconv_unet(x, c1, 16)
+    print('Shape after the second de-CNN:', x.shape)
 
 
-# one more CNN layer to produce the final output
-# sigmoid activation, instea of tanh, is used 
-# 3-channel color image is produced
-decoded = Conv2D(RGB_CH, (3, 3), activation = 'sigmoid', 
-        padding = 'same')(x)
-print('Shape of the decoder output:', decoded.shape)
+    # one more CNN layer to produce the final output
+    # sigmoid activation, instea of tanh, is used 
+    # 3-channel color image is produced
+    decoded = Conv2D(RGB_CH, (3, 3), activation = 'sigmoid', 
+            padding = 'same')(x)
+    print('Shape of the decoder output:', decoded.shape)
+
+    return decoded
 
 
 # forming the overall Unet
+input_shape = (DIM, DIM, GRAY_CH)
+original = Input(shape = input_shape)
+c1, c2, encoded = build_enc()
+decoded = build_dec(c1, c2, encoded)
 unet = Model(inputs = original, outputs = decoded)
 unet.summary()
 
@@ -191,7 +199,7 @@ history = unet.fit(X_train_gray, X_train,
                     shuffle = True,
                     validation_split = MY_SPLIT)
 
-unet.save(os.path.join(MODEL_DIR, 'chap3.h5'))
+unet.save(os.path.join(MODEL_DIR, 'chap7.h5'))
 
 
     ####################
@@ -209,7 +217,7 @@ def plot_loss(history):
     plt.legend(['Training data', 'Validation data'], loc=0)
 
     # save the plot as PNG file
-    plt.savefig(os.path.join(OUT_DIR, 'chap3-plot.png'))
+    plt.savefig(os.path.join(OUT_DIR, 'chap7-plot.png'))
     print('\n== LOSS PLOT SAVED ==')
     plt.clf()
 
@@ -224,7 +232,7 @@ def show_images(X_test_gray):
     pred = unet.predict(X_test_gray)
 
 
-    # show the fist 10 images in the databse
+    # show the fist 10 images in the database
     n = 10
     plt.figure(figsize = (20, 6))
 
@@ -248,7 +256,7 @@ def show_images(X_test_gray):
         ax.get_yaxis().set_visible(False)
 
 
-    plt.savefig(os.path.join(OUT_DIR, 'chap3-sample.png'))
+    plt.savefig(os.path.join(OUT_DIR, 'chap7-sample.png'))
     print('\n== SAMPLE COLORING RESULTS SAVED ==')
     plt.clf()
 

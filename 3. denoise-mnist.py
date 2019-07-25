@@ -188,7 +188,7 @@ autoencoder.fit(X_train_noisy, X_train,
                 validation_data = (X_test_noisy, X_test),
                 epochs = 10, batch_size = MY_BATCH)
 
-autoencoder.save(os.path.join(MODEL_DIR, 'chap1.h5'))
+autoencoder.save(os.path.join(MODEL_DIR, 'chap3.h5'))
 
 
     ####################
@@ -229,5 +229,5 @@ for i in range(Nout):
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 
-plt.savefig(os.path.join(OUT_DIR, 'chap1.png'))
+plt.savefig(os.path.join(OUT_DIR, 'chap3.png'))
 

@@ -50,7 +50,7 @@ model = Sequential()
 model.add(Dense(32, activation = 'sigmoid', input_dim = 100))
 model.add(Dense(1, activation = 'sigmoid'))
 model.summary()
-model.save('chap1-1.h5')
+model.save('chap0-1.h5')
 
 
 # model compilation setting
@@ -61,7 +61,7 @@ model.compile(optimizer = 'rmsprop', loss = 'binary_crossentropy',
 # model training and saving
 model.fit(data, labels, epochs = MY_EPOCH, batch_size = MY_BATCH, 
         verbose = 1)
-model.save('chap1-2.h5')
+model.save('chap0-2.h5')
 
 
     ####################

@@ -453,8 +453,8 @@ def train_GAN(vgg, discriminator, generator, gan_model, TB):
 
 
     # Save models
-    generator.save_weights("model/chap5-gen.h5")
-    discriminator.save_weights("model/chap5-dis.h5")
+    generator.save_weights("model/chap6-gen.h5")
+    discriminator.save_weights("model/chap6-dis.h5")
 
 
 # save low-resolution, high-resolution (original) and
@@ -504,7 +504,7 @@ def evaluate_GAN(generator, discriminator):
         # we use generator to tunr a low resolution image to high        
         # and save the 3 image files
         fake_image = generator.predict_on_batch(real_low)
-        path = "output/chap5-img-{}".format(i)
+        path = "output/chap6-img-{}".format(i)
         real_low = real_low.reshape(LOW_SHAPE)
         real_high = real_high.reshape(HIGH_SHAPE)
         fake_image = fake_image.reshape(HIGH_SHAPE)
@@ -516,7 +516,7 @@ def gan_prediction():
 
     # we just need a trained generator
     generator = build_generator()
-    generator.load_weights("model/chap5-gen.h5")
+    generator.load_weights("model/chap6-gen.h5")
 
     for i in range(5):
         # sample a new batch of images
@@ -529,7 +529,7 @@ def gan_prediction():
         # we use generator to tunr a low resolution image to high        
         # and save the 3 image files
         fake_image = generator.predict_on_batch(real_low)
-        path = "output/chap5-img-pred-{}".format(i)
+        path = "output/chap6-img-pred-{}".format(i)
         real_low = real_low.reshape(LOW_SHAPE)
         real_high = real_high.reshape(HIGH_SHAPE)
         fake_image = fake_image.reshape(HIGH_SHAPE)

@@ -134,7 +134,7 @@ model.summary()
 # model training and saving
 model.compile(loss = 'mse', optimizer = 'adam', metrics = ['accuracy'])
 model.fit(X_train, Y_train, epochs = MY_EPOCH, batch_size = MY_BATCH, verbose = 1)
-model.save('chap9.h5')
+model.save('chap1.h5')
 
 
     ####################

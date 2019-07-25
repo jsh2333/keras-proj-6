@@ -190,7 +190,7 @@ def plot_loss_curves(history):
 
 
     # save the plot and close it
-    image_name = 'chap2.png'
+    image_name = 'chap5.png'
     fig.savefig(os.path.join(OUT_DIR, image_name))
     plt.clf()
 
@@ -202,7 +202,7 @@ def train_model():
                     metrics=[EVAL_METRIC])
 
     # keras package to save the model after every epoch
-    checkpoint = ModelCheckpoint(filepath = os.path.join(MODEL_DIR, "chap2.h5"),
+    checkpoint = ModelCheckpoint(filepath = os.path.join(MODEL_DIR, "chap5.h5"),
                                     verbose = 0,
                                     save_best_only = True)
 
@@ -343,7 +343,7 @@ def get_confusion_matrix(error):
 
 
 # load the model after training
-load_model(os.path.join(MODEL_DIR, "chap2.h5"))
+load_model(os.path.join(MODEL_DIR, "chap5.h5"))
 
 
 # calculate reconstruction error
