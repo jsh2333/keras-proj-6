@@ -15,8 +15,8 @@ import pandas as pd
 from keras.models import Model, load_model
 from keras.layers import Input, Dense
 from keras.callbacks import ModelCheckpoint, TensorBoard
-from keras import regularizers
-from sklearn.metrics import confusion_matrix, precision_recall_curve, f1_score
+from sklearn.metrics import confusion_matrix, f1_score
+from sklearn.metrics import precision_recall_curve
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
@@ -25,11 +25,8 @@ from sklearn.model_selection import train_test_split
 RANDOM_SEED = 5234
 MY_SPLIT = 0.25
 DIM_ENCODER = 16
-EPOCHS = 5
-BATCH_SIZE = 200
-OPTIMIZER = 'adam'
-LOSS = 'mean_squared_error'
-EVAL_METRIC = 'accuracy'
+MY_EPOCH = 5
+MY_BATCH = 200
 MY_RECALL = 0.8
 
 
@@ -55,7 +52,7 @@ if not os.path.exists(LOG_DIR):
 
 
 # load the database from a file and process it
-def load_and_preprocess_data():
+def build_DB():
 
     # read the file
     raw_DB = pd.read_csv(DB_DIR + "creditcard.csv")
@@ -73,7 +70,7 @@ def load_and_preprocess_data():
 
 
     # drop the "Time" column (axis = 1)
-    # then perform data centering of "Amopunt" column with z-score
+    # then perform data centering of "Amount" column with z-score
     # we need to reshape the column to 2-dimension
     # to use fit_transform()
     scaler = StandardScaler()
@@ -89,7 +86,7 @@ def load_and_preprocess_data():
 
 
 # split the database to train and test sets
-def get_train_and_test_data(clean_DB):
+def split_DB(clean_DB):
 
     # python function from scikitlearn package
     # splits arrays or matrices into random train and test sets
@@ -99,7 +96,7 @@ def get_train_and_test_data(clean_DB):
     # process train input set
     # remove all fraud data (Class = 1) from train data
     # then remove "Class" column from train data
-    # all this is for anomally detection
+    # all this is for anomaly detection
     print('\n== TRAIN AND TEST SET PROCESSING ==')
     print('Train input set shape (original):', X_train.shape)
     X_train = X_train[X_train.Class == 0]
@@ -110,7 +107,7 @@ def get_train_and_test_data(clean_DB):
     # process test input set
     # remove "Class" column and assign it to Y_test
     # we do NOT drop fraud transactions here
-    # all of this is for confusion matrix and F1 score calculation
+    # purpose is for confusion matrix and F1 score calculation
     print('Test input set shape (original):', X_test.shape)
     Y_test = X_test['Class']
     X_test = X_test.drop(['Class'], axis = 1)
@@ -131,12 +128,12 @@ def get_train_and_test_data(clean_DB):
 
 
 # Loading and processing data
-clean_DB = load_and_preprocess_data()
+clean_DB = build_DB()
 
 
 # split the database to train and test sets
-# note that we do not use training set label!!!
-X_train, X_test, Y_test = get_train_and_test_data(clean_DB)
+# note that we do NOT use training set label (Y_training)!!!
+X_train, X_test, Y_test = split_DB(clean_DB)
 
 
     ###############################
@@ -197,9 +194,7 @@ def plot_loss_curves(history):
 
 # train the autoencoder
 def train_model():
-    model.compile(optimizer=OPTIMIZER,
-                    loss=LOSS,
-                    metrics=[EVAL_METRIC])
+    model.compile(optimizer = 'adam', loss = 'mse', metrics = ['acc'])
 
     # keras package to save the model after every epoch
     checkpoint = ModelCheckpoint(filepath = os.path.join(MODEL_DIR, "chap5.h5"),
@@ -220,15 +215,14 @@ def train_model():
     # we can use callbacks to get a view on internal states and statistics 
     # of the model during training
     # we can pass a list of callbacks to the .fit() 
-    # the relevant methods of the callbacks will then be called 
-    # at each stage of the training
+    # note that we use X_train for both the input and the output
     history = model.fit(X_train, X_train,
-                            epochs = EPOCHS,
-                            batch_size = BATCH_SIZE,
-                            shuffle = True,
-                            validation_data = (X_test, X_test),
-                            verbose = 1,
-                            callbacks = [checkpoint, log_tensorboard]).history
+                        epochs = MY_EPOCH,
+                        batch_size = MY_BATCH,
+                        shuffle = True,
+                        validation_data = (X_test, X_test),
+                        verbose = 1,
+                        callbacks = [checkpoint, log_tensorboard]).history
 
 
     # training done. plotting loss curves
@@ -334,22 +328,20 @@ def get_confusion_matrix(error):
 
     # show confusion matrix
     # positive: not fraud, negative: fraud
-    #             pos (truth)   neg (truth)
-    # pos (pred)  [true_pos      false_pos]
-    # neg (pred)  [false_neg      true_neg] 
     print('\n== CONFUSION MATRIX ==')
     print(c_matrix)
     print("\nF1 score:", f1_score(error.true_class, pred, average = 'micro'))
 
 
 # load the model after training
+# this is not necessary actually
 load_model(os.path.join(MODEL_DIR, "chap5.h5"))
 
 
 # calculate reconstruction error
-recon_error = recon_error()
+error = recon_error()
 
 
 # seek the threshold that gives at least 0.8 (= MY_RECALL) recall
 # use the threshold to build confusion matrix and calculate F1 score
-get_confusion_matrix(recon_error)
+get_confusion_matrix(error)

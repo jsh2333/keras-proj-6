@@ -9,13 +9,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+
 from keras.layers import Dense, Input
 from keras.layers import Conv2D, Flatten
 from keras.layers import Reshape, Conv2DTranspose
 from keras.models import Model
-from keras import backend as K
 from keras.datasets import mnist
-from PIL import Image
 
 
 # global constants and hyper-parameters
@@ -23,6 +22,7 @@ np.random.seed(1337)
 IMG_DIM = 28
 MY_SAMPLE = 421
 MY_SHAPE = (28, 28, 1)
+MY_EPOCH = 10
 MY_BATCH = 200
 CNN_KERNEL = 3
 VECTOR_DIM = 16
@@ -45,7 +45,7 @@ if not os.path.exists(MODEL_DIR):
 
 # load MNIST dataset
 # note that we do not need labels (Y_train and Y_test)
-# because we are builing an autoencoder
+# because we are building an autoencoder
 (X_train, _), (X_test, _) = mnist.load_data()
 
 
@@ -186,7 +186,7 @@ autoencoder.compile(loss = 'mse', optimizer = 'adam')
 # and the label is the original image, NOT the correct number
 autoencoder.fit(X_train_noisy, X_train,
                 validation_data = (X_test_noisy, X_test),
-                epochs = 10, batch_size = MY_BATCH)
+                epochs = MY_EPOCH, batch_size = MY_BATCH)
 
 autoencoder.save(os.path.join(MODEL_DIR, 'chap3.h5'))
 

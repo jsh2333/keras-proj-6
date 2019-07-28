@@ -1,4 +1,4 @@
-# Image Resolution Enhancement with GAN
+# Image Resolution Enhancement with Keras GAN
 # July 21, 2019
 # Sung Kyu Lim
 # Georgia Institute of Technology
@@ -27,6 +27,8 @@ MY_EPOCH = 100
 MY_BATCH = 1
 LOW_SHAPE = (64, 64, 3)
 HIGH_SHAPE = (256, 256, 3)
+DIS_ANS = (MY_BATCH, 16, 16, 1)
+
 MY_MOM = 0.8
 MY_ALPHA = 0.2
 MY_RESIDUAL = 15
@@ -73,25 +75,25 @@ def sample_images(batch_size):
     for img in images_batch:
         # Get an ndarray of the current image
         # image shape is (218, 178, 3)
-        img1 = imread(img, mode = 'RGB')
-        img1 = img1.astype(np.float32)
+        new_img = imread(img, mode = 'RGB')
+        new_img = new_img.astype(np.float32)
 
 
         # Resize the image from (218, 178, 3) to
         # high_shape = (256, 256, 3)
         # low_shape = (64, 64, 3)
-        img1_high = imresize(img1, HIGH_SHAPE)
-        img1_low = imresize(img1, LOW_SHAPE)
+        new_img_high = imresize(new_img, HIGH_SHAPE)
+        new_img_low = imresize(new_img, LOW_SHAPE)
 
 
         # Do a random horizontal flip
         if np.random.random() < 0.5:
-            img1_high = np.fliplr(img1_high)
-            img1_low = np.fliplr(img1_low)
+            new_img_high = np.fliplr(new_img_high)
+            new_img_low = np.fliplr(new_img_low)
 
 
-        high_img.append(img1_high)
-        low_img.append(img1_low)
+        high_img.append(new_img_high)
+        low_img.append(new_img_low)
 
     # convert the lists to Numpy arrays
     return np.array(high_img), np.array(low_img)
@@ -229,7 +231,7 @@ def build_generator():
 
     # pre-residual block
     gen1 = Conv2D(64, (9, 9), strides = 1, padding = 'same', 
-            activation='relu')(input_layer)
+            activation = 'relu')(input_layer)
 
     print('\n== GENERATOR MODEL SUMMARY ==')
     print('Input shape:', input_shape)
@@ -275,14 +277,14 @@ def build_generator():
     return model
 
 
-# finally create GASN network using all preview models including
+# create GASN network using all preview models including
 # VGG19, discriminator, and generator
 def build_GAN():
 
     # build and compile VGG19 network to extract features
     # shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
+    # we do not NOT need compile statement
     vgg = build_vgg()
-    vgg.compile(loss = 'mse', optimizer = MY_OPT, metrics = ['acc'])
 
     # build and compile the discriminator network
     # shape change: (?, 256, 256, 3) -> (?, 16, 16, 1)
@@ -290,47 +292,41 @@ def build_GAN():
     discriminator.compile(loss = 'mse', optimizer = MY_OPT, metrics = ['acc'])
 
     # Build the generator network
-    # comilation of generator is the same as that of GAN
+    # compilation of generator is the same as that of GAN
     # shape change: (?, 64, 64, 3) -> (?, 256, 256, 3)
     generator = build_generator()
 
-    # GAN has two inputs
-    # input layers for low-resolution and high-resolution images
+    # GAN has one input
+    # for low-resolution images that go to generator
     input_low = Input(shape = LOW_SHAPE)
-    input_high = Input(shape = HIGH_SHAPE)
 
     # generator accepts the low resolution images
     # and produce fake high resolution images
     fake_high = generator(input_low)
 
-    # discriminator accepts high resolution images (= ground truth)
+    # 1. discriminator accepts the fake image
     # and compute the probability of fake being close to real
     probs = discriminator(fake_high)
 
-    # VGG19 accepts fake images produced by generator
+    # 2. VGG19 accepts fake images produced by generator
     # and extract their feature maps
     features = vgg(fake_high)
 
-    # make the discriminator network as non-trainable
-    # only during generator training
+    # we initially set the discriminator non-trainable
     discriminator.trainable = False
 
     # Create and compile an adversarial model
-    # our GAN has two inputs and two outputs
-    # the two inputs include:
+    # our GAN has one input and two outputs
+    # the input includes:
     #    1. low resolution image (goes to generator)
-    #    2. high resolution image (goes to discriminator)
-    #
-    # the two outputs include: 
+    # the two output labels to guide backpropagation include: 
     #    1. probs: discriminator output
-    #    2. features: VGG19 output 
-    gan_model = Model([input_low, input_high], [probs, features])
+    #    2. features: VGG output 
+    gan_model = Model([input_low], [probs, features])
 
     # we train generator during GAN training
     # discriminator is not trained
-    # perceptual loss = 1 * content loss + 0.001 * adversarial loss
-    #                 = 1 * mse (generator) + 0.001 * crossentropy (discriminator)
-    # mse is optimized during generator/GAN training   
+    # loss = 0.001 x entropy (probs, DIS) + 1 x mse (features, GEN)
     gan_model.compile(loss = ['binary_crossentropy', 'mse'], 
             loss_weights = [0.001, 1], optimizer = MY_OPT)
 
@@ -377,8 +373,8 @@ def train_D():
     # we use 256 values (= 16 x 16) to represent 
     # how realistic fake images are
     # initialize real labels with 1 and fake 0
-    real_labels = np.ones((MY_BATCH, 16, 16, 1))
-    fake_labels = np.zeros((MY_BATCH, 16, 16, 1))
+    real_labels = np.ones(DIS_ANS)
+    fake_labels = np.zeros(DIS_ANS)
 
     # we first train the discriminator using real data
     # train_on_batch accepts (training data, target data)        
@@ -391,6 +387,7 @@ def train_D():
     # we get two mse loss values in return:
     # only the first value is relevant
     d_loss_fake = discriminator.train_on_batch(fake_high, fake_labels)
+
 
     # we take the average of the two above and report as the combined loss
     d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
@@ -412,22 +409,22 @@ def train_G():
     # Extract feature maps for real high-resolution images
     # VGG shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
     real_features = vgg.predict(real_high)
-    real_labels = np.ones((MY_BATCH, 16, 16, 1))
+    real_labels = np.ones(DIS_ANS)
+
 
     # Train the generator network
     # we want generator to fake real images as much as possible
     # discriminator is not trained during this process
-    # train_on_batch accepts (training data, target data) 
     # our GAN needs the following model parameters
-    # ([input_low, input_high], [probs, features])
-    g_loss = gan_model.train_on_batch([real_low, real_high],
+    # ([input_low], [probs for DIS out, features for VGG out])
+    g_loss = gan_model.train_on_batch([real_low],
             [real_labels, real_features])
 
     return g_loss
 
 
 # overall GAN training
-# we alternate between discriminator and generotor training 
+# we alternate between discriminator and generator training 
 # during generator training, discriminator is not trained
 def train_GAN(vgg, discriminator, generator, gan_model, TB):
     print('\n== GAN TRAINING STARTS ==')
@@ -501,7 +498,7 @@ def evaluate_GAN(generator, discriminator):
         real_low = real_low / 127.5 - 1.
 
 
-        # we use generator to tunr a low resolution image to high        
+        # we use generator to turn a low resolution image to high        
         # and save the 3 image files
         fake_image = generator.predict_on_batch(real_low)
         path = "output/chap6-img-{}".format(i)
