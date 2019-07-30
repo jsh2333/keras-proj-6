@@ -380,12 +380,14 @@ def train_D():
     # train_on_batch accepts (training data, target data)        
     # we get two mse loss values in return:
     # only the first value is relevant
+    # use train_on_batch() instead of fit() for GAN
     d_loss_real = discriminator.train_on_batch(real_high, real_labels)
 
 
     # we train the discriminator again using fake data and labels
     # we get two mse loss values in return:
     # only the first value is relevant
+    # use train_on_batch() instead of fit() for GAN
     d_loss_fake = discriminator.train_on_batch(fake_high, fake_labels)
 
 
@@ -417,6 +419,7 @@ def train_G():
     # discriminator is not trained during this process
     # our GAN needs the following model parameters
     # ([input_low], [probs for DIS out, features for VGG out])
+    # use train_on_batch() instead of fit() for GAN
     g_loss = gan_model.train_on_batch([real_low],
             [real_labels, real_features])
 
@@ -456,6 +459,7 @@ def train_GAN(vgg, discriminator, generator, gan_model, TB):
 
 # save low-resolution, high-resolution (original) and
 # fake high-resolution images 
+# add_subplot needs (nrows, ncols, index) 
 def save_images(low_res_image, original_image, fake_image, path):
     fig = plt.figure()
     ax = fig.add_subplot(1, 3, 1)

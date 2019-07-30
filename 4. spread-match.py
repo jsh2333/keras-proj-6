@@ -179,6 +179,7 @@ def D_train_on_batch(real, fake, dis):
 
     # Keras train_on_batch
     # we give (input, label)
+    # use train_on_batch() instead of fit() for GAN
     dis.train_on_batch(X, y)
 
 

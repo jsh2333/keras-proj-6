@@ -131,6 +131,7 @@ def deconv_unet(x, ext, ch_out):
     # between ext (= old layer) and x (= currunt layer) 
     # axis = 3 is for RGB channel
     x = Concatenate(axis = 3)([x, ext])
+    print('Shape after concatenation:', x.shape)
 
     # first convolution with 3x3 filter
     x = Conv2D(ch_out, (3, 3), padding='same')(x)
@@ -155,7 +156,7 @@ def build_enc():
     print('Shape after the second CNN:', c2.shape)
 
     encoded = conv_unet(c2, 64, True)
-    print('Shape of the encoder output:', encoded.shape)
+    print('Shape of the encoder output:', encoded.shape, '\n')
 
     return c1, c2, encoded
 
@@ -164,7 +165,7 @@ def build_enc():
 def build_dec(c1, c2, encoded):
     # connect c2 layer as bypass
     x = deconv_unet(encoded, c2, 32)
-    print('\nShape after the first de-CNN:', x.shape)
+    print('Shape after the first de-CNN:', x.shape)
 
     # connect c1 layer as bypass
     x = deconv_unet(x, c1, 16)
@@ -172,7 +173,7 @@ def build_dec(c1, c2, encoded):
 
 
     # one more CNN layer to produce the final output
-    # sigmoid activation, instea of tanh, is used 
+    # sigmoid activation, instead of tanh, is used 
     # 3-channel color image is produced
     decoded = Conv2D(RGB_CH, (3, 3), activation = 'sigmoid', 
             padding = 'same')(x)
